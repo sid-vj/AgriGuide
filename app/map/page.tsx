@@ -162,7 +162,10 @@ export default function Home() {
     };
     
     utterance.onerror = (e) => {
-      console.error("SpeechSynthesis error:", e);
+      // Ignore normal cancel/interrupted events to prevent Next.js error overlays in development
+      if (e.error !== 'interrupted' && e.error !== 'canceled') {
+        console.warn("SpeechSynthesis error:", e);
+      }
       setIsPlayingVoice(false);
       setIsPausedVoice(false);
     };

@@ -25,8 +25,27 @@ let stationDataCache: any[] | null = null;
 function loadCSV() {
   if (stationDataCache) return stationDataCache;
 
-  // Since web is inside agritech, the datas directory is at ../datas
-  const csvPath = path.resolve(process.cwd(), '../datas/agritech_station_database.csv');
+  const candidates = [
+    path.resolve(/*turbopackIgnore: true*/ process.cwd(), '../datas/agritech_station_database.csv'),
+    path.resolve(/*turbopackIgnore: true*/ process.cwd(), 'datas/agritech_station_database.csv'),
+    path.resolve(/*turbopackIgnore: true*/ process.cwd(), '../Downloads/datas/agritech_station_database.csv'),
+    path.resolve(/*turbopackIgnore: true*/ process.cwd(), 'Downloads/datas/agritech_station_database.csv'),
+    '/Users/sanjeev/Downloads/datas/agritech_station_database.csv'
+  ];
+
+  let csvPath = '';
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      csvPath = candidate;
+      break;
+    }
+  }
+
+  if (!csvPath) {
+    console.error('Failed to locate agritech_station_database.csv in candidates:', candidates);
+    return [];
+  }
+
   try {
     const fileContent = fs.readFileSync(csvPath, 'utf-8');
     const lines = fileContent.split('\n').filter(l => l.trim() !== '');
