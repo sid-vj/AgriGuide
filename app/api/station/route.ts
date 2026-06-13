@@ -56,6 +56,80 @@ function loadCSV() {
   }
 }
 
+function safeFloat(val: any) {
+  if (val === undefined || val === null) return undefined;
+  const num = parseFloat(val);
+  return isNaN(num) ? undefined : num;
+}
+
+async function fetchGovtSoilData(lat: number, lon: number) {
+  try {
+    const delta = 0.01;
+    const minLon = lon - delta;
+    const minLat = lat - delta;
+    const maxLon = lon + delta;
+    const maxLat = lat + delta;
+    const bbox = `${minLon},${minLat},${maxLon},${maxLat}`;
+
+    const baseUrl = "https://soilhealth.dac.gov.in/jW8X3zM5Y7pQvLr4K2Tn6HqPbD0tZmN9R6JfO1wCiG8xV5eTk2CdMoF9YsQr0Z7LmN1YxU4pTb2K5LvHqX7F3aCmGzR4Pw0D8UtYnJ9oZ2SvNlQ7Tz1PjR5LcX0Qf8HkV9OrG4V7YxU3pJk6TnMm5CdX8B9tRi1Lw2Qn7F4ZzJk8WvP1GrZ6Sx0JoH5C3oV7fNi2/shc/wms/wms";
+    const layer = "33_730_shc_2024-25";
+
+    const url = new URL(baseUrl);
+    url.searchParams.append("service", "WMS");
+    url.searchParams.append("version", "1.1.1");
+    url.searchParams.append("request", "GetFeatureInfo");
+    url.searchParams.append("layers", layer);
+    url.searchParams.append("query_layers", layer);
+    url.searchParams.append("bbox", bbox);
+    url.searchParams.append("width", "101");
+    url.searchParams.append("height", "101");
+    url.searchParams.append("X", "50");
+    url.searchParams.append("Y", "50");
+    url.searchParams.append("info_format", "application/json");
+    url.searchParams.append("HIDE_GEOMETRY", "true");
+
+    const response = await fetch(url.toString(), { signal: AbortSignal.timeout(8000) });
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    const features = data.features || [];
+    if (features.length === 0) return null;
+
+    const props = features[0].properties;
+    if (!props) return null;
+
+    return {
+      n_avail: safeFloat(props.N_AVAIL || props.n_avail),
+      p_avail: safeFloat(props.P_AVAIL || props.p_avail),
+      k_avail: safeFloat(props.K_AVAIL || props.k_avail),
+      ph_govt: safeFloat(props.PH || props.ph),
+      oc_govt: safeFloat(props.OC || props.oc),
+      ec_govt: safeFloat(props.EC || props.ec)
+    };
+  } catch (error) {
+    console.warn("WMS fetch failed:", error);
+    return null;
+  }
+}
+
+async function fetchRealtimeWeather(lat: number, lon: number) {
+  try {
+    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m`, { next: { revalidate: 300 } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.current) return null;
+    return {
+      current_temp: data.current.temperature_2m,
+      current_humidity: data.current.relative_humidity_2m,
+      current_precip: data.current.precipitation,
+      current_wind: data.current.wind_speed_10m
+    };
+  } catch (error) {
+    console.warn("Real-time weather fetch failed:", error);
+    return null;
+  }
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const latStr = searchParams.get('lat');
@@ -94,6 +168,18 @@ export async function GET(request: Request) {
       message: `No environmental data available within ${MAX_DISTANCE_KM}km. Closest is ${Math.round(minDistance)}km away.`,
       nearestDistance: minDistance 
     });
+  }
+
+  // Attempt to augment with live Government WMS data
+  const govtData = await fetchGovtSoilData(userLat, userLon);
+  if (govtData) {
+    nearestStation = { ...nearestStation, ...govtData };
+  }
+
+  // Attempt to augment with real-time weather data
+  const weatherData = await fetchRealtimeWeather(userLat, userLon);
+  if (weatherData) {
+    nearestStation = { ...nearestStation, ...weatherData };
   }
 
   return NextResponse.json({

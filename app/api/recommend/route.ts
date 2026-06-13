@@ -97,6 +97,17 @@ Structure the report as follows:
       `;
     }
 
+    let npkDataStr = '';
+    if (environmentalData.n_avail !== undefined) {
+      npkDataStr = `
+- Government SHC Nitrogen (N): ${Number(environmentalData.n_avail).toFixed(2)} kg/ha
+- Government SHC Phosphorus (P): ${Number(environmentalData.p_avail).toFixed(2)} kg/ha
+- Government SHC Potassium (K): ${Number(environmentalData.k_avail).toFixed(2)} kg/ha
+- Government SHC Electrical Conductivity (EC): ${Number(environmentalData.ec_govt).toFixed(2)} dS/m
+**CRITICAL: You MUST use this precise Government SHC NPK data to formulate exact fertilizer and nutrient deficit recommendations in your report.**
+`;
+    }
+
     // Construct the final prompt
     const prompt = `
 ${promptInstruction}
@@ -118,6 +129,7 @@ Environmental Data for ${locationName}:
 - Soil Sand %: ${Number(environmentalData.soil_sand_pct).toFixed(3)}%
 - Soil Clay %: ${Number(environmentalData.soil_clay_pct).toFixed(3)}%
 - Soil Silt %: ${Number(environmentalData.soil_silt_pct).toFixed(3)}%
+${npkDataStr}
 
 Ensure the formatting uses standard Markdown (bolding, lists, headers).
 `;

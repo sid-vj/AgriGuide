@@ -1,14 +1,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --bg-color: #0b0f19;
-  --panel-bg: rgba(20, 25, 40, 0.6);
-  --panel-border: rgba(255, 255, 255, 0.08);
-  --text-primary: #f0f4f8;
-  --text-secondary: #94a3b8;
-  --accent-color: #10b981; /* Vibrant green */
-  --accent-glow: rgba(16, 185, 129, 0.4);
-  --accent-secondary: #3b82f6; /* Blue for water/weather */
+  --bg-color: #fdfbf7;
+  --panel-bg: rgba(255, 255, 255, 0.85);
+  --panel-border: rgba(212, 175, 55, 0.3);
+  --text-primary: #2c3e50;
+  --text-secondary: #5a6c7d;
+  --accent-color: #d4af37;
+  --accent-glow: rgba(212, 175, 55, 0.4);
+  --accent-secondary: #8b7355;
   --font-main: 'Outfit', sans-serif;
 }
 
@@ -22,7 +22,7 @@ body {
   background-color: var(--bg-color);
   color: var(--text-primary);
   font-family: var(--font-main);
-  overflow: hidden; /* Hide scrollbars for app feel */
+  overflow-x: hidden; /* Allow vertical scroll for landing page */
 }
 
 /* Glassmorphism Utilities */
@@ -32,11 +32,11 @@ body {
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--panel-border);
   border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
 }
 
 .text-gradient {
-  background: linear-gradient(135deg, #10b981, #3b82f6);
+  background: linear-gradient(135deg, #d4af37, #8b7355);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -44,7 +44,7 @@ body {
 
 /* Glowing Button */
 .btn-glow {
-  background: linear-gradient(135deg, #10b981, #059669);
+  background: linear-gradient(135deg, #d4af37, #b8860b);
   color: white;
   border: none;
   padding: 12px 24px;
@@ -59,7 +59,7 @@ body {
 
 .btn-glow:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.6);
+  box-shadow: 0 6px 20px rgba(212, 175, 55, 0.6);
 }
 
 .btn-glow:active {
@@ -87,12 +87,12 @@ body {
   width: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(0,0,0,0.1);
+  background: rgba(0,0,0,0.05);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.1);
+  background: rgba(212, 175, 55, 0.4);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255,255,255,0.2);
+  background: rgba(212, 175, 55, 0.7);
 }
