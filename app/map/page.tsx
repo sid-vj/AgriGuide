@@ -55,6 +55,44 @@ const getTempStatus = (temp: number) => {
   return "Hot Climate (Heat-tolerant crops needed)";
 };
 
+const cleanMarkdownForSpeech = (text: string): string => {
+  if (!text) return '';
+  return text
+    .replace(/[*_~`#]/g, '') // remove formatting and headers
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // replace links with just text
+    .replace(/^[\s]*[-+*]\s+/gm, '') // remove bullet points
+    .replace(/\|/g, ' ') // remove table cells divider
+    .replace(/\s+/g, ' ') // normalize whitespace
+    .trim();
+};
+
+const getVoiceForLanguage = (langName: string): SpeechSynthesisVoice | null => {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return null;
+  const voices = window.speechSynthesis.getVoices();
+  const langCodeMap: { [key: string]: string[] } = {
+    'English': ['en-IN', 'en-US', 'en-GB', 'en'],
+    'Hindi': ['hi-IN', 'hi'],
+    'Tamil': ['ta-IN', 'ta'],
+    'Telugu': ['te-IN', 'te'],
+    'Marathi': ['mr-IN', 'mr'],
+    'Bengali': ['bn-IN', 'bn']
+  };
+  const targets = langCodeMap[langName] || ['en-US'];
+  
+  for (const target of targets) {
+    const found = voices.find(v => v.lang.toLowerCase() === target.toLowerCase() || v.lang.toLowerCase().startsWith(target.toLowerCase() + '-'));
+    if (found) return found;
+  }
+  
+  for (const target of targets) {
+    const prefix = target.split('-')[0].toLowerCase();
+    const found = voices.find(v => v.lang.toLowerCase().startsWith(prefix));
+    if (found) return found;
+  }
+  
+  return null;
+};
+
 export default function Home() {
   const [selectedPos, setSelectedPos] = useState<[number, number] | null>(null);
   const [envData, setEnvData] = useState<any | null>(null);
@@ -74,6 +112,112 @@ export default function Home() {
   // AI Settings
   const [language, setLanguage] = useState('English');
   const [activeReportType, setActiveReportType] = useState<string | null>(null);
+
+  // Voice Readback states
+  const [isPlayingVoice, setIsPlayingVoice] = useState(false);
+  const [isPausedVoice, setIsPausedVoice] = useState(false);
+  const [speechRate, setSpeechRate] = useState(1.0);
+  const [hasVoiceSupport, setHasVoiceSupport] = useState(true);
+
+  // Cancel speech synthesis when component unmounts or report changes
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  // When recommendation changes or is closed, cancel any playing speech
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      setIsPlayingVoice(false);
+      setIsPausedVoice(false);
+    }
+  }, [recommendation]);
+
+  const startSpeech = (textToSpeak: string) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) {
+      setHasVoiceSupport(false);
+      return;
+    }
+    
+    // Stop any current speech before starting new
+    window.speechSynthesis.cancel();
+    
+    const cleanedText = cleanMarkdownForSpeech(textToSpeak);
+    const utterance = new SpeechSynthesisUtterance(cleanedText);
+    
+    const voice = getVoiceForLanguage(language);
+    if (voice) {
+      utterance.voice = voice;
+    }
+    
+    utterance.rate = speechRate;
+    
+    utterance.onend = () => {
+      setIsPlayingVoice(false);
+      setIsPausedVoice(false);
+    };
+    
+    utterance.onerror = (e) => {
+      console.error("SpeechSynthesis error:", e);
+      setIsPlayingVoice(false);
+      setIsPausedVoice(false);
+    };
+
+    setIsPlayingVoice(true);
+    setIsPausedVoice(false);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const pauseSpeech = () => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.pause();
+      setIsPausedVoice(true);
+    }
+  };
+
+  const resumeSpeech = () => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.resume();
+      setIsPausedVoice(false);
+    }
+  };
+
+  const stopSpeech = () => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      setIsPlayingVoice(false);
+      setIsPausedVoice(false);
+    }
+  };
+
+  const handleRateChange = (newRate: number) => {
+    setSpeechRate(newRate);
+    if (isPlayingVoice && recommendation) {
+      setTimeout(() => {
+        if (typeof window !== 'undefined' && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+          const cleanedText = cleanMarkdownForSpeech(recommendation);
+          const utterance = new SpeechSynthesisUtterance(cleanedText);
+          const voice = getVoiceForLanguage(language);
+          if (voice) utterance.voice = voice;
+          utterance.rate = newRate;
+          utterance.onend = () => {
+            setIsPlayingVoice(false);
+            setIsPausedVoice(false);
+          };
+          utterance.onerror = () => {
+            setIsPlayingVoice(false);
+            setIsPausedVoice(false);
+          };
+          window.speechSynthesis.speak(utterance);
+        }
+      }, 50);
+    }
+  };
 
   // Farmer Context Form
   const [landSize, setLandSize] = useState('1');
@@ -763,6 +907,119 @@ export default function Home() {
                   </div>
                   <button onClick={() => setRecommendation(null)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
                 </div>
+
+                {/* Voice Readback Widget */}
+                <div style={{ 
+                  background: 'rgba(212, 175, 55, 0.1)', 
+                  border: '1px solid rgba(212, 175, 55, 0.25)', 
+                  borderRadius: '10px', 
+                  padding: '12px 15px', 
+                  marginBottom: '15px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '1.2rem', animation: isPlayingVoice && !isPausedVoice ? 'pulse 1.5s infinite' : 'none' }}>
+                        {isPlayingVoice && !isPausedVoice ? '🔊' : '🔈'}
+                      </span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {isPlayingVoice && !isPausedVoice ? 'Reading Aloud...' : isPausedVoice ? 'Reading Paused' : 'Read Report Aloud'}
+                      </span>
+                    </div>
+                    
+                    {/* Animated sound wave bars when speaking */}
+                    {isPlayingVoice && !isPausedVoice && (
+                      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '14px' }}>
+                        <div className="bar animate-bar-1" style={{ width: '3px', height: '14px', background: 'var(--accent-color)' }}></div>
+                        <div className="bar animate-bar-2" style={{ width: '3px', height: '8px', background: 'var(--accent-color)' }}></div>
+                        <div className="bar animate-bar-3" style={{ width: '3px', height: '12px', background: 'var(--accent-color)' }}></div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    {/* Control Buttons */}
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {!isPlayingVoice ? (
+                        <button 
+                          onClick={() => startSpeech(recommendation || '')}
+                          style={{
+                            background: 'var(--accent-color)', color: 'white', border: 'none',
+                            padding: '8px 14px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 'bold',
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
+                          }}
+                        >
+                          ▶️ Listen ({language})
+                        </button>
+                      ) : (
+                        <>
+                          {isPausedVoice ? (
+                            <button 
+                              onClick={resumeSpeech}
+                              style={{
+                                background: 'var(--accent-color)', color: 'white', border: 'none',
+                                padding: '8px 12px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 'bold',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              ▶️ Resume
+                            </button>
+                          ) : (
+                            <button 
+                              onClick={pauseSpeech}
+                              style={{
+                                background: 'var(--accent-secondary)', color: 'white', border: 'none',
+                                padding: '8px 12px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 'bold',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              ⏸️ Pause
+                            </button>
+                          )}
+                          <button 
+                            onClick={stopSpeech}
+                            style={{
+                              background: '#ef4444', color: 'white', border: 'none',
+                              padding: '8px 12px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 'bold',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            ⏹️ Stop
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Speed/Rate Control */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Speed:</span>
+                      <select 
+                        value={speechRate}
+                        onChange={(e) => handleRateChange(parseFloat(e.target.value))}
+                        style={{
+                          padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--panel-border)',
+                          background: 'var(--bg-color)', color: 'var(--text-primary)', fontSize: '0.75rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <option value="0.7">0.7x (Very Slow)</option>
+                        <option value="0.85">0.85x (Slow)</option>
+                        <option value="1.0">1.0x (Normal)</option>
+                        <option value="1.15">1.15x (Fast)</option>
+                        <option value="1.3">1.3x (Very Fast)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {!hasVoiceSupport && (
+                    <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '2px' }}>
+                      ⚠️ Speech synthesis is not supported or blocked in this browser.
+                    </div>
+                  )}
+                </div>
+
                 <div className="markdown-content" style={{ fontSize: '0.9rem', lineHeight: '1.6' }}>
                   <ReactMarkdown>{recommendation}</ReactMarkdown>
                 </div>
@@ -821,6 +1078,28 @@ export default function Home() {
       {/* Inline styles */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes spin { 100% { transform: rotate(360deg); } }
+        
+        @keyframes bounce-bar-1 {
+          0% { height: 4px; }
+          100% { height: 14px; }
+        }
+        @keyframes bounce-bar-2 {
+          0% { height: 3px; }
+          100% { height: 9px; }
+        }
+        @keyframes bounce-bar-3 {
+          0% { height: 5px; }
+          100% { height: 12px; }
+        }
+        @keyframes pulse {
+          0% { opacity: 0.6; }
+          50% { opacity: 1; }
+          100% { opacity: 0.6; }
+        }
+        
+        .animate-bar-1 { animation: bounce-bar-1 0.6s ease-in-out infinite alternate; }
+        .animate-bar-2 { animation: bounce-bar-2 0.4s ease-in-out infinite alternate 0.15s; }
+        .animate-bar-3 { animation: bounce-bar-3 0.5s ease-in-out infinite alternate 0.05s; }
         
         .data-section { margin-bottom: 25px; }
         .section-title { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary); margin-bottom: 15px; border-bottom: 1px solid var(--panel-border); padding-bottom: 5px; }
