@@ -186,6 +186,7 @@ export default function Home() {
   const [loadingStation, setLoadingStation] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [landWarning, setLandWarning] = useState<string | null>(null);
+  const [isNonAgri, setIsNonAgri] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -400,6 +401,7 @@ export default function Home() {
     setActiveReportType(null);
     setErrorMsg(null);
     setLandWarning(null);
+    setIsNonAgri(false);
     setLoadingStation(true);
     setShowDropdown(false);
 
@@ -424,7 +426,8 @@ export default function Home() {
 
         const nonAgriClasses = ['building', 'commercial', 'residential', 'shop', 'office', 'amenity', 'leisure', 'highway'];
         if (nonAgriClasses.includes(cls) || type === 'city' || type === 'town') {
-          setLandWarning("⚠️ This location appears to be non-agricultural or urban. AI crop recommendations may be less accurate for city centers.");
+          setIsNonAgri(true);
+          setLandWarning("⚠️ Non-agricultural land detected. Showing climate & soil data only.");
         }
       } catch (e) {
         console.warn("Reverse geocoding failed", e);
@@ -900,7 +903,37 @@ export default function Home() {
 
             <hr style={{ border: 'none', borderTop: '1px solid var(--panel-border)', margin: '20px 0' }} />
 
-            {/* Farmer Context Form */}
+            {/* Non-Agricultural Land Notice — hides farmer profile & AI tools */}
+            {isNonAgri && (
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.35)',
+                borderRadius: '10px',
+                padding: '20px',
+                marginBottom: '10px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '1.6rem' }}>🏙️</span>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: '0.95rem', color: '#ef4444' }}>
+                      Non-Agricultural Land
+                    </p>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                      This location is identified as urban, residential, or commercial land. Farmer profile setup and AI crop report generation are only available for agricultural land. The climate and soil data above is shown for reference.
+                    </p>
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#f87171', background: 'rgba(239,68,68,0.06)', padding: '8px 12px', borderRadius: '6px', borderLeft: '3px solid #ef4444' }}>
+                  💡 If this is incorrect, try selecting a point in an open field or rural area nearby.
+                </div>
+              </div>
+            )}
+
+            {/* Farmer Context Form — hidden for non-agri land */}
+            {!isNonAgri && (
             <div className="data-section">
               <h3 className="section-title">Farmer Profile & Context</h3>
               <div style={{ background: 'var(--panel-bg)', padding: '15px', borderRadius: '8px', border: '1px solid var(--panel-border)' }}>
@@ -998,9 +1031,10 @@ export default function Home() {
 
               </div>
             </div>
+            )}
 
-            {/* AI Generation Tools */}
-            {!recommendation && !loadingAi && (
+            {/* AI Generation Tools — hidden for non-agri land */}
+            {!isNonAgri && !recommendation && !loadingAi && (
               <div style={{ marginTop: '20px' }}>
                 <div style={{ marginBottom: '15px' }}>
                   <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>REPORT LANGUAGE</label>
@@ -1042,7 +1076,7 @@ export default function Home() {
               </div>
             )}
 
-            {loadingAi && (
+            {!isNonAgri && loadingAi && (
               <div style={{ textAlign: 'center', padding: '30px' }}>
                 <div className="spinner" style={{
                   width: '30px', height: '30px', border: '3px solid var(--panel-border)',
@@ -1054,7 +1088,7 @@ export default function Home() {
               </div>
             )}
 
-            {recommendation && (
+            {!isNonAgri && recommendation && (
               <div style={{
                 background: 'rgba(16, 185, 129, 0.08)',
                 border: '1px solid rgba(16, 185, 129, 0.3)',
