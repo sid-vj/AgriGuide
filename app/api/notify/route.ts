@@ -1,14 +1,5 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-
-const DB_PATH = path.resolve(process.cwd(), '../datas/farmers.json');
-const SMS_LOG_PATH = path.resolve(process.cwd(), '../datas/sms_logs.json');
-
-function ensureFiles() {
-  if (!fs.existsSync(DB_PATH)) fs.writeFileSync(DB_PATH, JSON.stringify([]));
-  if (!fs.existsSync(SMS_LOG_PATH)) fs.writeFileSync(SMS_LOG_PATH, JSON.stringify([]));
-}
+import clientPromise from '@/lib/mongodb';
 
 async function fetchRealtimeWeather(lat: number, lon: number) {
   try {
@@ -22,29 +13,31 @@ async function fetchRealtimeWeather(lat: number, lon: number) {
 }
 
 export async function GET() {
-  ensureFiles();
   try {
-    const data = fs.readFileSync(SMS_LOG_PATH, 'utf-8');
-    return NextResponse.json(JSON.parse(data));
+    const client = await clientPromise;
+    const db = client.db('agritech');
+    
+    // Fetch logs sorted by timestamp descending, limit to last 100 for performance
+    const logs = await db.collection('sms_logs').find({}).sort({ timestamp: -1 }).limit(100).toArray();
+    
+    return NextResponse.json(logs.reverse()); // Reverse back so frontend slice().reverse() works as before, or frontend can just map it.
   } catch (error) {
+    console.error("Database Error:", error);
     return NextResponse.json({ error: 'Failed to read logs' }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
-  ensureFiles();
   try {
     const body = await request.json();
     const isManualAlert = body.type === 'manual';
     const manualMessage = body.message || '';
 
-    const farmersData = fs.readFileSync(DB_PATH, 'utf-8');
-    const farmers = JSON.parse(farmersData);
-    
-    const logsData = fs.readFileSync(SMS_LOG_PATH, 'utf-8');
-    const smsLogs = JSON.parse(logsData);
+    const client = await clientPromise;
+    const db = client.db('agritech');
 
-    let messagesSent = 0;
+    const farmers = await db.collection('farmers').find({}).toArray();
+    const newLogs = [];
 
     for (const farmer of farmers) {
       let messageToSend = null;
@@ -80,23 +73,24 @@ export async function POST(request: Request) {
       }
 
       if (messageToSend) {
-        smsLogs.push({
+        newLogs.push({
           id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
-          farmerId: farmer.id,
+          farmerId: farmer._id.toString(),
           farmerName: farmer.name,
           phone: farmer.phone,
           message: messageToSend,
           timestamp: new Date().toISOString()
         });
-        messagesSent++;
       }
     }
 
-    fs.writeFileSync(SMS_LOG_PATH, JSON.stringify(smsLogs, null, 2));
+    if (newLogs.length > 0) {
+      await db.collection('sms_logs').insertMany(newLogs);
+    }
 
-    return NextResponse.json({ success: true, messagesSent });
+    return NextResponse.json({ success: true, messagesSent: newLogs.length });
   } catch (error) {
-    console.error(error);
+    console.error("Database Error:", error);
     return NextResponse.json({ error: 'Failed to run notification job' }, { status: 500 });
   }
 }
