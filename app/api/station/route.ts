@@ -26,10 +26,11 @@ function loadCSV() {
   if (stationDataCache) return stationDataCache;
 
   const candidates = [
+    // Primary: in-project data folder (committed to git, works on Render)
+    path.resolve(/*turbopackIgnore: true*/ process.cwd(), 'data/agritech_station_database.csv'),
+    // Fallback: external datas folder (local dev only)
     path.resolve(/*turbopackIgnore: true*/ process.cwd(), '../datas/agritech_station_database.csv'),
     path.resolve(/*turbopackIgnore: true*/ process.cwd(), 'datas/agritech_station_database.csv'),
-    path.resolve(/*turbopackIgnore: true*/ process.cwd(), '../Downloads/datas/agritech_station_database.csv'),
-    path.resolve(/*turbopackIgnore: true*/ process.cwd(), 'Downloads/datas/agritech_station_database.csv'),
     '/Users/sanjeev/Downloads/datas/agritech_station_database.csv'
   ];
 

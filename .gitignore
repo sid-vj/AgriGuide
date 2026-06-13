@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Large data files (too big for git - only Python processing scripts need them)
+/datas/
+datas.zip
+
+# Note: /data/agritech_station_database.csv (~1.4MB) IS committed to git
+# and is the source the app uses on Render.
