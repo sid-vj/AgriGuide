@@ -78,19 +78,106 @@ const getVoiceForLanguage = (langName: string): SpeechSynthesisVoice | null => {
     'Bengali': ['bn-IN', 'bn']
   };
   const targets = langCodeMap[langName] || ['en-US'];
-  
+
   for (const target of targets) {
     const found = voices.find(v => v.lang.toLowerCase() === target.toLowerCase() || v.lang.toLowerCase().startsWith(target.toLowerCase() + '-'));
     if (found) return found;
   }
-  
+
   for (const target of targets) {
     const prefix = target.split('-')[0].toLowerCase();
     const found = voices.find(v => v.lang.toLowerCase().startsWith(prefix));
     if (found) return found;
   }
-  
+
   return null;
+};
+
+const renderRecommendation = (text: string) => {
+  if (!text) return null;
+
+  // Normalize headers with space
+  const normalizedText = text.replace(/^(#{1,4})\s*(.*)$/gm, '### $2');
+  
+  // Split by '### '
+  const parts = normalizedText.split(/###\s+/);
+  
+  if (parts.length <= 1) {
+    // If no h3 sections, try splitting by '## ' as fallback
+    const h2Parts = normalizedText.split(/##\s+/);
+    if (h2Parts.length > 1) {
+      return renderSections(h2Parts);
+    }
+    return (
+      <div className="markdown-content">
+        <ReactMarkdown>{text}</ReactMarkdown>
+      </div>
+    );
+  }
+
+  return renderSections(parts);
+};
+
+const renderSections = (parts: string[]) => {
+  const intro = parts[0].trim();
+  const sections = parts.slice(1);
+
+  // Emojis mapping for section titles
+  const getSectionEmoji = (title: string, index: number) => {
+    const t = title.toLowerCase();
+    if (t.includes('assessment') || t.includes('summary')) return '📊';
+    if (t.includes('crop') || t.includes('recommend')) return '🌱';
+    if (t.includes('improvement') || t.includes('plan') || t.includes('step')) return '🛠️';
+    if (t.includes('scheme') || t.includes('policy') || t.includes('govt')) return '🏛️';
+    if (t.includes('soil') || t.includes('physicochemical')) return '🧪';
+    if (t.includes('economic') || t.includes('viability')) return '💰';
+    if (t.includes('agronomic') || t.includes('metrics')) return '🌾';
+    if (t.includes('contact') || t.includes('local')) return '📞';
+    return index % 3 === 0 ? '📊' : index % 3 === 1 ? '🌱' : '🛠️';
+  };
+
+  // Color scheme mapping
+  const getSectionColors = (index: number) => {
+    const colors = [
+      { border: 'var(--accent-color)', text: 'var(--accent-color)' },       // Green
+      { border: 'var(--accent-secondary)', text: 'var(--accent-secondary)' }, // Blue
+      { border: '#eab308', text: '#eab308' }                                  // Yellow
+    ];
+    return colors[index % colors.length];
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {intro && (
+        <div className="markdown-content" style={{ fontSize: '0.9rem', lineHeight: '1.6', color: 'var(--text-primary)' }}>
+          <ReactMarkdown>{intro}</ReactMarkdown>
+        </div>
+      )}
+      
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+        {sections.map((sec, idx) => {
+          const lines = sec.split('\n');
+          const title = lines[0].trim();
+          const content = lines.slice(1).join('\n').trim();
+          const { border, text } = getSectionColors(idx);
+          const emoji = getSectionEmoji(title, idx);
+
+          return (
+            <div key={idx} className="flashcard animate-slide-in" style={{ borderTop: `4px solid ${border}` }}>
+              <h3 className="flashcard-title" style={{ color: text, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '1.3rem' }}>{emoji}</span>
+                {title}
+              </h3>
+              
+              <div className="markdown-content" style={{ fontSize: '0.9rem', lineHeight: '1.6' }}>
+                <ReactMarkdown>{content}</ReactMarkdown>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 };
 
 export default function Home() {
@@ -99,7 +186,7 @@ export default function Home() {
   const [loadingStation, setLoadingStation] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [landWarning, setLandWarning] = useState<string | null>(null);
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
@@ -108,7 +195,7 @@ export default function Home() {
 
   const [recommendation, setRecommendation] = useState<string | null>(null);
   const [loadingAi, setLoadingAi] = useState(false);
-  
+
   // AI Settings
   const [language, setLanguage] = useState('English');
   const [activeReportType, setActiveReportType] = useState<string | null>(null);
@@ -142,25 +229,25 @@ export default function Home() {
       setHasVoiceSupport(false);
       return;
     }
-    
+
     // Stop any current speech before starting new
     window.speechSynthesis.cancel();
-    
+
     const cleanedText = cleanMarkdownForSpeech(textToSpeak);
     const utterance = new SpeechSynthesisUtterance(cleanedText);
-    
+
     const voice = getVoiceForLanguage(language);
     if (voice) {
       utterance.voice = voice;
     }
-    
+
     utterance.rate = speechRate;
-    
+
     utterance.onend = () => {
       setIsPlayingVoice(false);
       setIsPausedVoice(false);
     };
-    
+
     utterance.onerror = (e) => {
       // Ignore normal cancel/interrupted events to prevent Next.js error overlays in development
       if (e.error !== 'interrupted' && e.error !== 'canceled') {
@@ -245,14 +332,14 @@ export default function Home() {
     try {
       const res = await fetch('/api/farmers');
       if (res.ok) setSavedFarmers(await res.json());
-    } catch (e) {}
+    } catch (e) { }
   };
 
   const fetchSmsLogs = async () => {
     try {
       const res = await fetch('/api/notify');
       if (res.ok) setSmsLogs(await res.json());
-    } catch (e) {}
+    } catch (e) { }
   };
 
   useEffect(() => {
@@ -280,7 +367,7 @@ export default function Home() {
         setTimeout(() => setSaveSuccess(false), 3000);
         fetchFarmers();
       }
-    } catch (e) {}
+    } catch (e) { }
     setIsSaving(false);
   };
 
@@ -289,7 +376,7 @@ export default function Home() {
     try {
       await fetch('/api/notify', { method: 'POST', body: JSON.stringify({ type: 'auto' }) });
       fetchSmsLogs();
-    } catch (e) {}
+    } catch (e) { }
     setIsNotifying(false);
   };
 
@@ -324,7 +411,7 @@ export default function Home() {
         // We will just directly call nominatim
         const nominatimRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
         const revData = await nominatimRes.json();
-        
+
         if (revData.error === "Unable to geocode") {
           isOcean = true;
           setErrorMsg("⚠️ This location appears to be in the ocean or an unmapped region. Please select a valid landmass.");
@@ -334,7 +421,7 @@ export default function Home() {
 
         const cls = revData.class;
         const type = revData.type;
-        
+
         const nonAgriClasses = ['building', 'commercial', 'residential', 'shop', 'office', 'amenity', 'leisure', 'highway'];
         if (nonAgriClasses.includes(cls) || type === 'city' || type === 'town') {
           setLandWarning("⚠️ This location appears to be non-agricultural or urban. AI crop recommendations may be less accurate for city centers.");
@@ -342,13 +429,13 @@ export default function Home() {
       } catch (e) {
         console.warn("Reverse geocoding failed", e);
       }
-      
+
       if (isOcean) return;
 
       // 2. Fetch Environmental Data
       const res = await fetch(`/api/station?lat=${lat}&lon=${lon}`);
       const data = await res.json();
-      
+
       if (!res.ok) {
         setErrorMsg(data.error || 'Failed to fetch data.');
         setLoadingStation(false);
@@ -388,9 +475,9 @@ export default function Home() {
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setSearchQuery(val);
-    
+
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    
+
     if (val.trim().length > 2) {
       searchTimeoutRef.current = setTimeout(() => {
         fetchSearchResults(val);
@@ -424,16 +511,16 @@ export default function Home() {
     setLoadingAi(true);
     setRecommendation(null);
     setActiveReportType(reportType);
-    
+
     const currentMonth = new Date().toLocaleString('default', { month: 'long' });
-    
+
     try {
       const res = await fetch('/api/recommend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          environmentalData: envData, 
-          language, 
+        body: JSON.stringify({
+          environmentalData: envData,
+          language,
           reportType,
           locationName: searchQuery || 'Selected Coordinates',
           currentMonth,
@@ -475,11 +562,15 @@ export default function Home() {
       <MapPicker onLocationSelect={handleLocationSelect} selectedPos={selectedPos} />
 
       {/* Header Overlay */}
-      <div 
-        className="glass-panel" 
-        style={{ 
+      <div
+        className="glass-panel"
+        style={{
           position: 'absolute', top: '20px', left: '20px', zIndex: 10, padding: '20px',
-          width: '380px', borderTop: '4px solid var(--accent-color)'
+          width: '380px', borderTop: '4px solid var(--accent-color)',
+          background: 'rgba(253, 251, 247, 0.94)',
+          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.15)',
+          border: '1px solid rgba(212, 175, 55, 0.25)',
+          borderTopColor: 'var(--accent-color)'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px' }}>
@@ -494,17 +585,17 @@ export default function Home() {
 
         <div style={{ position: 'relative' }}>
           <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '10px' }}>
-            <input 
-              type="text" 
-              placeholder="Search for a village or farm location..." 
+            <input
+              type="text"
+              placeholder="Search for a village or farm location..."
               value={searchQuery}
               onChange={handleSearchChange}
-              onFocus={() => { if(searchResults.length > 0) setShowDropdown(true); }}
+              onFocus={() => { if (searchResults.length > 0) setShowDropdown(true); }}
               onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-              style={{ 
-                flex: 1, padding: '12px 15px', borderRadius: '6px', border: '1px solid var(--panel-border)', 
+              style={{
+                flex: 1, padding: '12px 15px', borderRadius: '6px', border: '1px solid var(--panel-border)',
                 background: 'var(--bg-color)', color: 'var(--text-primary)', fontFamily: 'var(--font-main)'
-              }} 
+              }}
             />
             <button type="submit" className="btn-glow" disabled={searching} style={{ padding: '12px 20px' }}>
               {searching ? '...' : 'Locate'}
@@ -513,7 +604,7 @@ export default function Home() {
 
           {/* CRM Quick Actions */}
           <div style={{ marginTop: '15px', display: 'flex', gap: '10px' }}>
-            <select 
+            <select
               onChange={(e) => {
                 const f = savedFarmers.find(x => x.id === e.target.value);
                 if (f) loadFarmerProfile(f);
@@ -540,8 +631,8 @@ export default function Home() {
               boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
             }}>
               {searchResults.map((result, idx) => (
-                <div 
-                  key={idx} 
+                <div
+                  key={idx}
                   onClick={() => handleSuggestionClick(result)}
                   style={{
                     padding: '12px 15px', borderBottom: idx < searchResults.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
@@ -575,9 +666,9 @@ export default function Home() {
           position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
           zIndex: 10, padding: '20px', display: 'flex', alignItems: 'center', gap: '10px'
         }}>
-          <div className="spinner" style={{ 
-            width: '20px', height: '20px', border: '3px solid var(--panel-border)', 
-            borderTopColor: 'var(--accent-color)', borderRadius: '50%', animation: 'spin 1s linear infinite' 
+          <div className="spinner" style={{
+            width: '20px', height: '20px', border: '3px solid var(--panel-border)',
+            borderTopColor: 'var(--accent-color)', borderRadius: '50%', animation: 'spin 1s linear infinite'
           }}></div>
           <span>Analyzing field conditions...</span>
         </div>
@@ -588,17 +679,25 @@ export default function Home() {
         <div className="glass-panel animate-slide-in" style={{
           position: 'absolute', top: '20px', right: '20px', bottom: '20px', width: '520px',
           zIndex: 10, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-          borderLeft: '4px solid var(--accent-secondary)'
+          borderLeft: '4px solid var(--accent-secondary)',
+          background: 'rgba(253, 251, 247, 0.94)',
+          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.15)',
+          border: '1px solid rgba(212, 175, 55, 0.25)'
         }}>
-          <div style={{ padding: '20px', background: 'var(--panel-bg)', borderBottom: '1px solid var(--panel-border)' }}>
-            <h2 style={{ fontSize: '1.2rem', textTransform: 'uppercase', letterSpacing: '1px', margin: 0, color: 'var(--text-primary)' }}>Farm Health Overview</h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '5px 0 0 0' }}>
+          <div style={{ 
+            padding: '20px 24px', 
+            background: 'linear-gradient(135deg, #2c3e50 0%, #1a252f 100%)', 
+            borderBottom: '2px solid var(--accent-color)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+          }}>
+            <h2 style={{ fontSize: '1.25rem', textTransform: 'uppercase', letterSpacing: '1px', margin: 0, color: 'var(--accent-color)', fontWeight: 700 }}>Farm Health Overview</h2>
+            <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.8rem', margin: '6px 0 0 0', fontWeight: 500 }}>
               Lat: {formatNum(envData.latitude, 3)} | Lon: {formatNum(envData.longitude, 3)}
             </p>
           </div>
 
           <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
-            
+
             {/* Soft Warning for non-agri land */}
             {landWarning && (
               <div style={{ background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)', padding: '15px', borderRadius: '6px', marginBottom: '20px', color: '#eab308', fontSize: '0.85rem' }}>
@@ -625,7 +724,7 @@ export default function Home() {
                       <span className="value" style={{ color: 'var(--accent-color)', fontSize: '0.9rem' }}>{envData.current_humidity}%</span>
                     </div>
                     <div className="data-card" style={{ background: 'var(--panel-bg)', padding: '10px' }}>
-                      <span className="label" style={{ fontSize: '0.65rem' }}>Rainfall</span>
+                      <span className="label" style={{ fontSize: '0.65rem' }}>Precipitation</span>
                       <span className="value" style={{ color: 'var(--accent-secondary)', fontSize: '0.9rem' }}>{envData.current_precip}mm</span>
                     </div>
                     <div className="data-card" style={{ background: 'var(--panel-bg)', padding: '10px' }}>
@@ -637,27 +736,69 @@ export default function Home() {
               )}
 
               <div className="data-grid">
-                <div className="data-card" style={{ gridColumn: 'span 2' }}>
-                  <span className="label">General Climate</span>
-                  <span className="value">{getTempStatus(envData.mean_t2m)}</span>
-                  <span className="helper-text">Avg: {formatNum(envData.mean_t2m)}°C (High: {formatNum(envData.mean_t2m_max)}°C, Low: {formatNum(envData.mean_t2m_min)}°C)</span>
-                </div>
-                
-                <div className="data-card">
-                  <span className="label">Rainfall</span>
-                  <span className="value" style={{ color: getRainfallStatus(envData.mean_rainfall).color }}>
-                    {getRainfallStatus(envData.mean_rainfall).text}
+                <div className="data-card" style={{ gridColumn: 'span 2', padding: '16px' }}>
+                  <span className="label" style={{ marginBottom: '8px' }}>General Climate</span>
+                  <span className="value" style={{ fontSize: '1.15rem', color: 'var(--text-primary)', marginBottom: '12px', display: 'block' }}>
+                    {getTempStatus(envData.mean_t2m)}
                   </span>
-                  <span className="helper-text">{formatNum(envData.mean_rainfall)} mm avg</span>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: '10px' }}>
+                    <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--panel-border)', borderRadius: '6px', padding: '8px', textAlign: 'center' }}>
+                      <span className="label" style={{ fontSize: '0.65rem', marginBottom: '2px' }}>Average</span>
+                      <span className="value" style={{ fontSize: '1rem', color: 'var(--accent-color)' }}>
+                        {formatNum(envData.mean_t2m)}°C
+                      </span>
+                    </div>
+                    <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '6px', padding: '8px', textAlign: 'center' }}>
+                      <span className="label" style={{ fontSize: '0.65rem', color: '#f87171', marginBottom: '2px' }}>Max High</span>
+                      <span className="value" style={{ fontSize: '1rem', color: '#ef4444' }}>
+                        {formatNum(envData.mean_t2m_max)}°C
+                      </span>
+                    </div>
+                    <div style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '6px', padding: '8px', textAlign: 'center' }}>
+                      <span className="label" style={{ fontSize: '0.65rem', color: '#60a5fa', marginBottom: '2px' }}>Min Low</span>
+                      <span className="value" style={{ fontSize: '1rem', color: '#3b82f6' }}>
+                        {formatNum(envData.mean_t2m_min)}°C
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="data-card">
-                  <span className="label">Groundwater</span>
-                  <span className="value" style={{ color: getGroundwaterStatus(envData.mean_groundwater_level).color }}>
-                    {getGroundwaterStatus(envData.mean_groundwater_level).text}
-                  </span>
-                  <span className="helper-text">{formatNum(envData.mean_groundwater_level)} m deep</span>
-                </div>
+                {(() => {
+                  const status = getRainfallStatus(envData.mean_rainfall);
+                  return (
+                    <div className="data-card" style={{ 
+                      background: `${status.color}12`, 
+                      borderColor: `${status.color}35`,
+                    }}>
+                      <span className="label" style={{ color: `${status.color}b0` }}>Rainfall</span>
+                      <span className="value" style={{ color: status.color }}>
+                        {status.text}
+                      </span>
+                      <span className="helper-text" style={{ color: `${status.color}90` }}>
+                        {formatNum(envData.mean_rainfall)} mm avg
+                      </span>
+                    </div>
+                  );
+                })()}
+
+                {(() => {
+                  const status = getGroundwaterStatus(envData.mean_groundwater_level);
+                  return (
+                    <div className="data-card" style={{ 
+                      background: `${status.color}12`, 
+                      borderColor: `${status.color}35`,
+                    }}>
+                      <span className="label" style={{ color: `${status.color}b0` }}>Groundwater</span>
+                      <span className="value" style={{ color: status.color }}>
+                        {status.text}
+                      </span>
+                      <span className="helper-text" style={{ color: `${status.color}90` }}>
+                        {formatNum(envData.mean_groundwater_level)} m deep
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 
@@ -665,28 +806,48 @@ export default function Home() {
             <div className="data-section">
               <h3 className="section-title">Soil Quality & Health</h3>
               <div className="data-grid">
-                <div className="data-card">
-                  <span className="label">Soil Acidity (pH)</span>
-                  <span className="value" style={{ color: getPhStatus(envData.soil_phaq).color }}>
-                    {getPhStatus(envData.soil_phaq).text}
-                  </span>
-                  <span className="helper-text">pH {formatNum(envData.soil_phaq)}</span>
-                </div>
+                {(() => {
+                  const status = getPhStatus(envData.soil_phaq);
+                  return (
+                    <div className="data-card" style={{ 
+                      background: `${status.color}12`, 
+                      borderColor: `${status.color}35`,
+                    }}>
+                      <span className="label" style={{ color: `${status.color}b0` }}>Soil Acidity (pH)</span>
+                      <span className="value" style={{ color: status.color }}>
+                        {status.text}
+                      </span>
+                      <span className="helper-text" style={{ color: `${status.color}90` }}>
+                        pH {formatNum(envData.soil_phaq)}
+                      </span>
+                    </div>
+                  );
+                })()}
 
-                <div className="data-card">
-                  <span className="label">Soil Fertility (Carbon)</span>
-                  <span className="value" style={{ color: getCarbonStatus(envData.soil_orgc).color }}>
-                    {getCarbonStatus(envData.soil_orgc).text}
-                  </span>
-                  <span className="helper-text">Level: {formatNum(envData.soil_orgc)}</span>
-                </div>
+                {(() => {
+                  const status = getCarbonStatus(envData.soil_orgc);
+                  return (
+                    <div className="data-card" style={{ 
+                      background: `${status.color}12`, 
+                      borderColor: `${status.color}35`,
+                    }}>
+                      <span className="label" style={{ color: `${status.color}b0` }}>Soil Fertility (Carbon)</span>
+                      <span className="value" style={{ color: status.color }}>
+                        {status.text}
+                      </span>
+                      <span className="helper-text" style={{ color: `${status.color}90` }}>
+                        Level: {formatNum(envData.soil_orgc)}
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 <div className="data-card" style={{ gridColumn: 'span 2' }}>
                   <span className="label">Soil Type</span>
                   <span className="value text-accent-green">
                     {getSoilType(envData.soil_sand_pct, envData.soil_silt_pct, envData.soil_clay_pct)}
                   </span>
-                  
+
                   <div style={{ marginTop: '10px' }}>
                     <div style={{ display: 'flex', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
                       <div style={{ width: `${envData.soil_sand_pct}%`, background: '#eab308' }} title="Sand"></div>
@@ -764,7 +925,7 @@ export default function Home() {
                   <label className="form-label" style={{ marginBottom: '8px' }}>Irrigation Methods (Select all that apply)</label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                     {['Rain-fed', 'Borewell / Tube well', 'Canal / River Water', 'Farm Pond / Tank', 'Drip / Sprinkler'].map(method => (
-                      <button 
+                      <button
                         key={method}
                         onClick={(e) => { e.preventDefault(); toggleIrrigation(method); }}
                         style={{
@@ -826,7 +987,7 @@ export default function Home() {
                     <input type="text" placeholder="Farmer Name" value={farmerName} onChange={e => setFarmerName(e.target.value)} className="form-input" style={{ flex: 1 }} />
                     <input type="tel" placeholder="Phone Number" value={farmerPhone} onChange={e => setFarmerPhone(e.target.value)} className="form-input" style={{ flex: 1 }} />
                   </div>
-                  <button 
+                  <button
                     onClick={handleSaveFarmer}
                     disabled={isSaving || !farmerName || !farmerPhone}
                     style={{ width: '100%', padding: '10px', background: saveSuccess ? '#10b981' : 'var(--accent-secondary)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', transition: '0.3s' }}
@@ -843,11 +1004,11 @@ export default function Home() {
               <div style={{ marginTop: '20px' }}>
                 <div style={{ marginBottom: '15px' }}>
                   <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>REPORT LANGUAGE</label>
-                  <select 
-                    value={language} 
+                  <select
+                    value={language}
                     onChange={(e) => setLanguage(e.target.value)}
-                    style={{ 
-                      width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--panel-border)', 
+                    style={{
+                      width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--panel-border)',
                       background: 'var(--bg-color)', color: 'var(--text-primary)', fontFamily: 'var(--font-main)'
                     }}
                   >
@@ -859,20 +1020,20 @@ export default function Home() {
                     <option value="Bengali">Bengali (বাংলা)</option>
                   </select>
                 </div>
-                
+
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                   <button className="btn-glow" onClick={() => handleGenerateInsights('action_plan')} style={{ flex: 1, padding: '12px 10px', fontSize: '0.9rem' }}>
                     👨‍🌾 Generate Action Plan
                   </button>
-                  <button onClick={() => handleGenerateInsights('technical_report')} style={{ 
-                    flex: 1, padding: '12px 10px', fontSize: '0.9rem', background: 'transparent', 
+                  <button onClick={() => handleGenerateInsights('technical_report')} style={{
+                    flex: 1, padding: '12px 10px', fontSize: '0.9rem', background: 'transparent',
                     border: '1px solid var(--accent-secondary)', color: 'var(--accent-secondary)', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.3s'
                   }} onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
                     🔬 Technical Report
                   </button>
                 </div>
-                <button onClick={() => handleGenerateInsights('policies')} style={{ 
-                  width: '100%', padding: '12px 10px', fontSize: '0.9rem', background: 'rgba(234, 179, 8, 0.15)', 
+                <button onClick={() => handleGenerateInsights('policies')} style={{
+                  width: '100%', padding: '12px 10px', fontSize: '0.9rem', background: 'rgba(234, 179, 8, 0.15)',
                   border: '1px solid #eab308', color: '#854d0e', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.3s',
                   textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600
                 }} onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(234, 179, 8, 0.25)'} onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(234, 179, 8, 0.15)'}>
@@ -883,9 +1044,9 @@ export default function Home() {
 
             {loadingAi && (
               <div style={{ textAlign: 'center', padding: '30px' }}>
-                <div className="spinner" style={{ 
-                  width: '30px', height: '30px', border: '3px solid var(--panel-border)', 
-                  borderTopColor: 'var(--accent-color)', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 15px' 
+                <div className="spinner" style={{
+                  width: '30px', height: '30px', border: '3px solid var(--panel-border)',
+                  borderTopColor: 'var(--accent-color)', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 15px'
                 }}></div>
                 <p className="text-gradient" style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>
                   Generating {activeReportType === 'action_plan' ? 'Action Plan' : activeReportType === 'policies' ? 'Govt Schemes Report' : 'Technical Report'}...
@@ -894,10 +1055,10 @@ export default function Home() {
             )}
 
             {recommendation && (
-              <div style={{ 
-                background: 'rgba(16, 185, 129, 0.08)', 
-                border: '1px solid rgba(16, 185, 129, 0.3)', 
-                padding: '20px', 
+              <div style={{
+                background: 'rgba(16, 185, 129, 0.08)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                padding: '20px',
                 borderRadius: '8px',
                 marginTop: '10px'
               }}>
@@ -912,11 +1073,11 @@ export default function Home() {
                 </div>
 
                 {/* Voice Readback Widget */}
-                <div style={{ 
-                  background: 'rgba(212, 175, 55, 0.1)', 
-                  border: '1px solid rgba(212, 175, 55, 0.25)', 
-                  borderRadius: '10px', 
-                  padding: '12px 15px', 
+                <div style={{
+                  background: 'rgba(212, 175, 55, 0.1)',
+                  border: '1px solid rgba(212, 175, 55, 0.25)',
+                  borderRadius: '10px',
+                  padding: '12px 15px',
                   marginBottom: '15px',
                   display: 'flex',
                   flexDirection: 'column',
@@ -931,7 +1092,7 @@ export default function Home() {
                         {isPlayingVoice && !isPausedVoice ? 'Reading Aloud...' : isPausedVoice ? 'Reading Paused' : 'Read Report Aloud'}
                       </span>
                     </div>
-                    
+
                     {/* Animated sound wave bars when speaking */}
                     {isPlayingVoice && !isPausedVoice && (
                       <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '14px' }}>
@@ -946,7 +1107,7 @@ export default function Home() {
                     {/* Control Buttons */}
                     <div style={{ display: 'flex', gap: '6px' }}>
                       {!isPlayingVoice ? (
-                        <button 
+                        <button
                           onClick={() => startSpeech(recommendation || '')}
                           style={{
                             background: 'var(--accent-color)', color: 'white', border: 'none',
@@ -959,7 +1120,7 @@ export default function Home() {
                       ) : (
                         <>
                           {isPausedVoice ? (
-                            <button 
+                            <button
                               onClick={resumeSpeech}
                               style={{
                                 background: 'var(--accent-color)', color: 'white', border: 'none',
@@ -970,7 +1131,7 @@ export default function Home() {
                               ▶️ Resume
                             </button>
                           ) : (
-                            <button 
+                            <button
                               onClick={pauseSpeech}
                               style={{
                                 background: 'var(--accent-secondary)', color: 'white', border: 'none',
@@ -981,7 +1142,7 @@ export default function Home() {
                               ⏸️ Pause
                             </button>
                           )}
-                          <button 
+                          <button
                             onClick={stopSpeech}
                             style={{
                               background: '#ef4444', color: 'white', border: 'none',
@@ -998,7 +1159,7 @@ export default function Home() {
                     {/* Speed/Rate Control */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Speed:</span>
-                      <select 
+                      <select
                         value={speechRate}
                         onChange={(e) => handleRateChange(parseFloat(e.target.value))}
                         style={{
@@ -1023,10 +1184,10 @@ export default function Home() {
                   )}
                 </div>
 
-                <div className="markdown-content" style={{ fontSize: '0.9rem', lineHeight: '1.6' }}>
-                  <ReactMarkdown>{recommendation}</ReactMarkdown>
+                <div style={{ marginTop: '15px' }}>
+                  {renderRecommendation(recommendation)}
                 </div>
-                <button 
+                <button
                   onClick={() => window.print()}
                   style={{
                     marginTop: '25px', background: 'var(--accent-color)', border: 'none',
@@ -1048,17 +1209,17 @@ export default function Home() {
               <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>📡 SMS Notification Gateway</h2>
               <button onClick={() => setShowCRM(false)} style={{ background: 'transparent', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--text-secondary)' }}>&times;</button>
             </div>
-            
+
             <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '20px' }}>
               Run the automated notification job to check real-time weather against all saved farmer profiles. If critical weather is detected at their specific farm, an SMS alert will be dispatched automatically.
             </p>
-            
+
             <button onClick={triggerNotifications} disabled={isNotifying} className="btn-glow" style={{ padding: '12px 24px', width: '100%', marginBottom: '20px', background: isNotifying ? 'gray' : 'var(--accent-secondary)' }}>
               {isNotifying ? 'Scanning Networks & Weather Data...' : 'Run Automated Weather Checks & Dispatch SMS'}
             </button>
 
             <h3 style={{ fontSize: '1rem', color: 'var(--text-primary)', borderBottom: '1px solid var(--panel-border)', paddingBottom: '10px', marginBottom: '15px' }}>Recent Outbound SMS Logs</h3>
-            
+
             {smsLogs.length === 0 ? (
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', textAlign: 'center', padding: '20px' }}>No messages sent recently.</p>
             ) : (
@@ -1077,9 +1238,10 @@ export default function Home() {
           </div>
         </div>
       )}
-      
+
       {/* Inline styles */}
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @keyframes spin { 100% { transform: rotate(360deg); } }
         
         @keyframes bounce-bar-1 {
@@ -1125,6 +1287,29 @@ export default function Home() {
         .markdown-content ul { margin-left: 20px; margin-bottom: 15px; color: var(--text-primary); }
         .markdown-content li { margin-bottom: 6px; }
         .markdown-content strong { color: var(--text-primary); font-weight: 700; }
+
+        .flashcard {
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid var(--panel-border);
+          border-radius: 12px;
+          padding: 20px;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+          position: relative;
+          overflow: hidden;
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+          margin-bottom: 15px;
+        }
+        .flashcard:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+          background: rgba(255, 255, 255, 0.04);
+        }
+        .flashcard-title {
+          margin: 0;
+          font-size: 1.05rem;
+          font-weight: 700;
+          letter-spacing: 0.5px;
+        }
       `}} />
     </main>
   );

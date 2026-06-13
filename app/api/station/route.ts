@@ -50,15 +50,15 @@ function loadCSV() {
     const fileContent = fs.readFileSync(csvPath, 'utf-8');
     const lines = fileContent.split('\n').filter(l => l.trim() !== '');
     const headers = lines[0].split(',');
-    
+
     const parsed = lines.slice(1).map(line => {
       const values = line.split(',');
       const record: any = {};
       headers.forEach((header, i) => {
         const val = values[i];
         // Parse numeric values where applicable
-        if (header === 'latitude' || header === 'longitude' || header === 'mean_rainfall' || 
-            header === 'soil_ph' || header === 'soil_phaq' || header === 'soil_orgc' || header.includes('pct') || header.includes('depth') || header.includes('t2m')) {
+        if (header === 'latitude' || header === 'longitude' || header === 'mean_rainfall' ||
+          header === 'soil_ph' || header === 'soil_phaq' || header === 'soil_orgc' || header.includes('pct') || header.includes('depth') || header.includes('t2m')) {
           record[header] = parseFloat(val);
         } else {
           record[header] = val;
@@ -109,7 +109,7 @@ async function fetchGovtSoilData(lat: number, lon: number) {
 
     const response = await fetch(url.toString(), { signal: AbortSignal.timeout(8000) });
     if (!response.ok) return null;
-    
+
     const data = await response.json();
     const features = data.features || [];
     if (features.length === 0) return null;
@@ -133,18 +133,29 @@ async function fetchGovtSoilData(lat: number, lon: number) {
 
 async function fetchRealtimeWeather(lat: number, lon: number) {
   try {
-    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m`, { next: { revalidate: 300 } });
+    const API_KEY = process.env.WEATHER_API_KEY;
+    if (!API_KEY) {
+      console.warn("WEATHER_API_KEY is not defined in environment variables");
+      return null;
+    }
+
+    const res = await fetch(
+      `https://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=${lat},${lon}`,
+      { next: { revalidate: 300 } }
+    );
+
     if (!res.ok) return null;
     const data = await res.json();
     if (!data.current) return null;
+
     return {
-      current_temp: data.current.temperature_2m,
-      current_humidity: data.current.relative_humidity_2m,
-      current_precip: data.current.precipitation,
-      current_wind: data.current.wind_speed_10m
+      current_temp: data.current.temp_c,
+      current_humidity: data.current.humidity,
+      current_precip: data.current.precip_mm,
+      current_wind: data.current.wind_kph
     };
   } catch (error) {
-    console.warn("Real-time weather fetch failed:", error);
+    console.warn("Weather fetch failed:", error);
     return null;
   }
 }
@@ -180,12 +191,12 @@ export async function GET(request: Request) {
 
   // Use a reasonable threshold, e.g. 100km max.
   const MAX_DISTANCE_KM = 100;
-  
+
   if (minDistance > MAX_DISTANCE_KM) {
-    return NextResponse.json({ 
-      available: false, 
+    return NextResponse.json({
+      available: false,
       message: `No environmental data available within ${MAX_DISTANCE_KM}km. Closest is ${Math.round(minDistance)}km away.`,
-      nearestDistance: minDistance 
+      nearestDistance: minDistance
     });
   }
 

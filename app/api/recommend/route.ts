@@ -3,9 +3,9 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { 
-      environmentalData, 
-      language = 'English', 
+    const {
+      environmentalData,
+      language = 'English',
       reportType = 'action_plan',
       locationName = 'Unknown Location',
       currentMonth = 'Unknown Month',
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     }
 
     // Unpack farmer context if available
-    const fcText = farmerContext 
+    const fcText = farmerContext
       ? `Farmer Profile Context:
 - Land Size: ${farmerContext.landSize} ${farmerContext.landUnit}
 - Irrigation Method(s): ${farmerContext.irrigation}
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
     // Base prompt structures based on reportType
     let promptInstruction = '';
-    
+
     if (reportType === 'policies') {
       promptInstruction = `
 You are an expert Government Agricultural Extension Officer operating in ${locationName}.
@@ -53,12 +53,17 @@ You MUST heavily filter the schemes based on the Farmer Profile Context and the 
 - Equipment & Irrigation: If they selected Drip/Sprinkler, specifically outline how to claim PMKSY subsidies. If they selected Tractor, outline SMAM mechanization subsidies.
 - Environmental Adaptation: You MUST look at the Environmental Data provided below. If Soil pH is highly acidic/alkaline, recommend the Soil Health Card Scheme or soil reclamation subsidies. If Groundwater is dangerously deep, recommend watershed development or rainwater harvesting subsidies.
 
-Structure the report as follows:
-1. **Eligibility Summary**: 2 sentences explaining what their specific profile qualifies them for.
-2. **Top Central & State Schemes**: List 3-4 exact schemes they are eligible for. For EACH scheme provide:
-   - **Benefit**: Exactly what financial or physical aid they get.
-   - **How to Avail**: Exact steps (e.g., "Visit nearest CSC center", "Apply on PM-Kisan portal", "Contact Block Agriculture Officer").
-3. **Local Contact Points**: General advice on the nearest government point of contact (e.g. Krishi Vigyan Kendra).
+Structure the report exactly as follows using these headers:
+### Eligibility Summary
+Provide a brief summary of what their specific profile qualifies them for.
+
+### Top Central & State Schemes
+List 3-4 exact schemes they are eligible for. For EACH scheme provide:
+- **Benefit**: Exactly what financial or physical aid they get.
+- **How to Avail**: Exact steps (e.g., "Visit nearest CSC center", "Apply on PM-Kisan portal", "Contact Block Agriculture Officer").
+
+### Local Contact Points
+General advice on the nearest government point of contact (e.g. Krishi Vigyan Kendra).
       `;
     } else if (reportType === 'action_plan') {
       promptInstruction = `
@@ -75,10 +80,15 @@ You MUST heavily weigh the Farmer Profile Context.
 - If their land size is very small (e.g. 0.5 Acre), prioritize high-value horticulture or intensive mixed-cropping to maximize income per square foot.
 - Cross-reference environmental data with the geopolitical reality of ${locationName}. Do not hallucinate crops unsuitable for the region.
 
-Structure the report as follows:
-1. **Farm Assessment**: A brief, encouraging 2-sentence summary based on their exact land size, irrigation, equipment, and soil health.
-2. **Top Seasonal Crop Recommendations**: 2-3 specific crops that fit their budget, market, equipment, water access, and upcoming season.
-3. **Step-by-Step Improvement Plan**: 3 extremely practical things the farmer can do immediately to improve yield without breaking their budget.
+Structure the report exactly as follows using these headers:
+### Farm Assessment
+Provide a brief, encouraging summary based on their exact land size, irrigation, equipment, and soil health.
+
+### Top Seasonal Crop Recommendations
+Recommend 2-3 specific crops that fit their budget, market, equipment, water access, and upcoming season. For each crop, explain why it fits.
+
+### Step-by-Step Improvement Plan
+Detail 3 extremely practical things the farmer can do immediately to improve yield without breaking their budget.
       `;
     } else {
       promptInstruction = `
@@ -90,10 +100,15 @@ CRITICAL CONTEXT & ECONOMICS:
 You MUST evaluate the commercial viability based on the Farmer Profile Context.
 Analyze how the specific land size (${farmerContext?.landSize} ${farmerContext?.landUnit}), equipment (${farmerContext?.equipment}), and irrigation type (${farmerContext?.irrigation}) constrain or enable certain agronomic models given their investment capacity (${farmerContext?.budget}) and target market (${farmerContext?.market}).
 
-Structure the report as follows:
-1. **Physicochemical & Hydrological Assessment**: Deep dive into pH, carbon, granular composition, and water table relative to their irrigation method.
-2. **Economic Viability Assessment**: How their land size, equipment, and market access impact economies of scale for cultivating specific regional crops.
-3. **Agronomic Suitability Metrics**: Advanced recommendations for cash crops and necessary chemical/structural interventions.
+Structure the report exactly as follows using these headers:
+### Physicochemical & Hydrological Assessment
+Deep dive into pH, carbon, granular composition, and water table relative to their irrigation method.
+
+### Economic Viability Assessment
+How their land size, equipment, and market access impact economies of scale for cultivating specific regional crops.
+
+### Agronomic Suitability Metrics
+Advanced recommendations for cash crops and necessary chemical/structural interventions.
       `;
     }
 
@@ -131,7 +146,7 @@ Environmental Data for ${locationName}:
 - Soil Silt %: ${Number(environmentalData.soil_silt_pct).toFixed(3)}%
 ${npkDataStr}
 
-Ensure the formatting uses standard Markdown (bolding, lists, headers).
+Ensure the formatting uses standard Markdown (bolding, lists, headers). Keep the recommendations and action points highly pointwise, clear, and structured as bullet points to optimize readability. Do not use numbers for the section titles (only use "### " followed by the title).
 `;
 
     // Call Gemini API

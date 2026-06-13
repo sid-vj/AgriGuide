@@ -137,8 +137,23 @@ function FarmlandHighlighter({ onLoadingChange }: { onLoadingChange: (loading: b
   );
 }
 
+const themeUrls = {
+  light: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+  scenic: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+  satellite: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  dark: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+};
+
 export default function MapPickerComponent({ onLocationSelect, selectedPos }: MapPickerProps) {
   const [loadingFarmlands, setLoadingFarmlands] = useState(false);
+  const [mapTheme, setMapTheme] = useState<'light' | 'scenic' | 'satellite' | 'dark'>('scenic');
+
+  const getAttribution = () => {
+    if (mapTheme === 'satellite') {
+      return 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS';
+    }
+    return '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+  };
 
   return (
     <div style={{ height: '100%', width: '100%', position: 'absolute', top: 0, left: 0, zIndex: 0 }}>
@@ -155,6 +170,46 @@ export default function MapPickerComponent({ onLocationSelect, selectedPos }: Ma
         </div>
       )}
 
+      {/* Floating Theme Selector Toolbar */}
+      <div style={{
+        position: 'absolute', bottom: '20px', left: '20px', zIndex: 1000,
+        background: 'rgba(253, 251, 247, 0.95)',
+        border: '1px solid var(--panel-border)',
+        borderRadius: '30px',
+        padding: '4px',
+        display: 'flex',
+        gap: '2px',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.15)'
+      }}>
+        {(
+          [
+            { id: 'light', label: '🗺️ Light' },
+            { id: 'scenic', label: '🏞️ Scenic' },
+            { id: 'satellite', label: '🛰️ Satellite' },
+            { id: 'dark', label: '🕶️ Dark' }
+          ] as const
+        ).map((theme) => (
+          <button
+            key={theme.id}
+            onClick={() => setMapTheme(theme.id)}
+            style={{
+              background: mapTheme === theme.id ? 'var(--accent-color)' : 'transparent',
+              color: mapTheme === theme.id ? 'white' : 'var(--text-primary)',
+              border: 'none',
+              padding: '6px 14px',
+              borderRadius: '20px',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              outline: 'none'
+            }}
+          >
+            {theme.label}
+          </button>
+        ))}
+      </div>
+
       <MapContainer
         center={[20.5937, 78.9629]} // Center on India roughly by default
         zoom={5}
@@ -162,9 +217,8 @@ export default function MapPickerComponent({ onLocationSelect, selectedPos }: Ma
         zoomControl={false} // Clean UI
       >
         <TileLayer
-          // Changed to CartoDB Positron (Light mode) to match the new white & gold theme
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url={themeUrls[mapTheme]}
+          attribution={getAttribution()}
         />
         <LocationMarker selectedPos={selectedPos} onLocationSelect={onLocationSelect} />
         <MapController selectedPos={selectedPos} />
