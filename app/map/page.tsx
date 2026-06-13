@@ -423,11 +423,37 @@ export default function Home() {
 
         const cls = revData.class;
         const type = revData.type;
+        const addresstype = revData.addresstype || '';
+        const address = revData.address || {};
 
-        const nonAgriClasses = ['building', 'commercial', 'residential', 'shop', 'office', 'amenity', 'leisure', 'highway'];
-        if (nonAgriClasses.includes(cls) || type === 'city' || type === 'town') {
+        // Non-agri class/type indicators
+        const nonAgriClasses = [
+          'building', 'commercial', 'residential', 'shop', 'office',
+          'amenity', 'leisure', 'highway', 'railway', 'aeroway', 'tourism'
+        ];
+        const nonAgriAddressTypes = [
+          'road', 'suburb', 'city', 'town', 'neighbourhood', 'quarter',
+          'city_block', 'house_number', 'house', 'building', 'commercial',
+          'industrial', 'retail'
+        ];
+        const nonAgriTypes = [
+          'city', 'town', 'suburb', 'residential', 'commercial', 'industrial',
+          'retail', 'house', 'apartments', 'university', 'school',
+          'hospital', 'motorway', 'primary', 'secondary', 'tertiary'
+        ];
+
+        const hasCity = !!(address.city || address.town);
+        const lacksVillage = !(address.village || address.hamlet || address.county);
+
+        const isUrban =
+          nonAgriClasses.includes(cls) ||
+          nonAgriAddressTypes.includes(addresstype) ||
+          nonAgriTypes.includes(type) ||
+          (hasCity && lacksVillage);
+
+        if (isUrban) {
           setIsNonAgri(true);
-          setLandWarning("⚠️ Non-agricultural land detected. Showing climate & soil data only.");
+          setLandWarning('⚠️ Non-agricultural land detected. Showing climate & soil data only.');
         }
       } catch (e) {
         console.warn("Reverse geocoding failed", e);
@@ -677,8 +703,8 @@ export default function Home() {
         </div>
       )}
 
-      {/* Side Panel for Results */}
-      {envData && (
+      {/* Side Panel for Results — shown for envData OR non-agri land (banner only) */}
+      {(envData || isNonAgri) && (
         <div className="glass-panel animate-slide-in" style={{
           position: 'absolute', top: '20px', right: '20px', bottom: '20px', width: '520px',
           zIndex: 10, display: 'flex', flexDirection: 'column', overflow: 'hidden',
@@ -693,24 +719,30 @@ export default function Home() {
             borderBottom: '2px solid var(--accent-color)',
             boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
           }}>
-            <h2 style={{ fontSize: '1.25rem', textTransform: 'uppercase', letterSpacing: '1px', margin: 0, color: 'var(--accent-color)', fontWeight: 700 }}>Farm Health Overview</h2>
+            <h2 style={{ fontSize: '1.25rem', textTransform: 'uppercase', letterSpacing: '1px', margin: 0, color: 'var(--accent-color)', fontWeight: 700 }}>
+              {isNonAgri && !envData ? 'Location Analysis' : 'Farm Health Overview'}
+            </h2>
             <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.8rem', margin: '6px 0 0 0', fontWeight: 500 }}>
-              Lat: {formatNum(envData.latitude, 3)} | Lon: {formatNum(envData.longitude, 3)}
+              {selectedPos ? `Lat: ${formatNum(selectedPos[0], 3)} | Lon: ${formatNum(selectedPos[1], 3)}` : ''}
             </p>
           </div>
 
           <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
 
-            {/* Soft Warning for non-agri land */}
-            {landWarning && (
+            {/* landWarning soft banner (only shown when envData exists alongside it) */}
+            {landWarning && envData && (
               <div style={{ background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)', padding: '15px', borderRadius: '6px', marginBottom: '20px', color: '#eab308', fontSize: '0.85rem' }}>
                 {landWarning}
               </div>
             )}
 
+            {/* ===== ENV DATA SECTIONS (only when data is available) ===== */}
+            {envData && (
+              <div>
+
             {/* Weather & Water */}
             <div className="data-section">
-              <h3 className="section-title">Weather & Water Availability</h3>
+              <h3 className="section-title">Weather &amp; Water Availability</h3>
 
               {envData.current_temp !== undefined && (
                 <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '8px', padding: '15px', marginBottom: '15px' }}>
@@ -901,7 +933,10 @@ export default function Home() {
               </div>
             )}
 
-            <hr style={{ border: 'none', borderTop: '1px solid var(--panel-border)', margin: '20px 0' }} />
+            </div>
+            )}
+
+            {envData && <hr style={{ border: 'none', borderTop: '1px solid var(--panel-border)', margin: '20px 0' }} />}
 
             {/* Non-Agricultural Land Notice — hides farmer profile & AI tools */}
             {isNonAgri && (
