@@ -49,7 +49,7 @@ npm install
 ```
 
 ### 3. Setup Environment Variables
-Copy `.env.local.example` file to `.env.local`. Add your Gemini API key and Mongo DB URI:
+Copy `.env.local.example` file to `.env.local`. Add your [Gemini API key](https://aistudio.google.com/), [Mongo DB URI](https://www.mongodb.com/) and [Weather API Key](https://www.weatherapi.com/):
 ```bash
 cp .env.local.example .env.local
 ```
@@ -57,7 +57,7 @@ cp .env.local.example .env.local
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
 MONGODB_URI=your_mongo_db_uri_here
-WEATHER_API_KEY=7be53a0eab0e47eea97190927261306
+WEATHER_API_KEY=your_weather_api_key_here
 
 ```
 
