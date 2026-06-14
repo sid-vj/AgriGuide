@@ -156,7 +156,7 @@ export default function MapPickerComponent({ onLocationSelect, selectedPos }: Ma
   };
 
   return (
-    <div style={{ height: '100%', width: '100%', position: 'absolute', top: 0, left: 0, zIndex: 0 }}>
+    <div className="map-picker-wrapper no-print" style={{ height: '100%', width: '100%', position: 'absolute', top: 0, left: 0, zIndex: 0 }}>
       {/* Loading Indicator for Farmlands Overlay */}
       {loadingFarmlands && (
         <div style={{

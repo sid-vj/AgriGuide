@@ -585,6 +585,281 @@ export default function Home() {
     }
   };
 
+  // ── Print / Download ────────────────────────────────────────────────────────
+  // Opens a clean, self-contained popup window with the full report and triggers
+  // the browser's native print dialog from within that popup.  This completely
+  // avoids the CSS-override battle against React's inline positioned styles.
+  const handlePrint = () => {
+    if (!recommendation || !envData) return;
+
+    const reportTitle =
+      activeReportType === 'action_plan'
+        ? 'Action Plan'
+        : activeReportType === 'policies'
+        ? 'Govt Schemes & Subsidies'
+        : 'Technical Report';
+
+    const locationLabel =
+      searchQuery || (selectedPos ? `${formatNum(selectedPos[0], 4)}, ${formatNum(selectedPos[1], 4)}` : 'Unknown Location');
+
+    // Convert markdown to basic HTML for the popup (no ES2018+ flags)
+    const mdToHtml = (md: string): string => {
+      let html = md
+        // h3 headers
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        // h2 headers
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        // h1 headers
+        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+        // Bold
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        // Italic
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        // Unordered list items
+        .replace(/^[\s]*[-*+] (.+)$/gm, '<li>$1</li>')
+        // Paragraphs: double newlines
+        .replace(/\n{2,}/g, '</p><p>')
+        // Horizontal rules
+        .replace(/^---+$/gm, '<hr/>')
+        // Clean up stray newlines
+        .replace(/\n/g, ' ');
+
+      // Wrap consecutive <li> groups in <ul> using split/join (avoids /gs flag)
+      html = html
+        .split('</li>')
+        .join('</li>\u0000') // sentinel
+        .split('\u0000')
+        .map((chunk) => {
+          if (chunk.includes('<li>')) {
+            return '<ul>' + chunk + '</ul>';
+          }
+          return chunk;
+        })
+        .join('');
+
+      return html;
+    };
+
+
+    // Build env-data rows
+    const envRows = [
+      ['Average Temperature', envData.mean_t2m !== undefined ? `${formatNum(envData.mean_t2m)}°C` : 'N/A'],
+      ['Max Temperature', envData.mean_t2m_max !== undefined ? `${formatNum(envData.mean_t2m_max)}°C` : 'N/A'],
+      ['Min Temperature', envData.mean_t2m_min !== undefined ? `${formatNum(envData.mean_t2m_min)}°C` : 'N/A'],
+      ['Average Rainfall', envData.mean_rainfall !== undefined ? `${formatNum(envData.mean_rainfall)} mm` : 'N/A'],
+      ['Groundwater Depth', envData.mean_groundwater_level !== undefined ? `${formatNum(envData.mean_groundwater_level)} m` : 'N/A'],
+      ['Soil pH', envData.soil_phaq !== undefined ? formatNum(envData.soil_phaq) : 'N/A'],
+      ['Organic Carbon', envData.soil_orgc !== undefined ? formatNum(envData.soil_orgc) : 'N/A'],
+      ['Sand / Silt / Clay', envData.soil_sand_pct !== undefined ? `${formatNum(envData.soil_sand_pct)}% / ${formatNum(envData.soil_silt_pct)}% / ${formatNum(envData.soil_clay_pct)}%` : 'N/A'],
+      ...(envData.n_avail !== undefined ? [
+        ['Nitrogen (N)', `${formatNum(envData.n_avail)} kg/ha`],
+        ['Phosphorus (P)', `${formatNum(envData.p_avail)} kg/ha`],
+        ['Potassium (K)', `${formatNum(envData.k_avail)} kg/ha`],
+      ] : []),
+      ...(envData.current_temp !== undefined ? [
+        ['Live Temperature', `${envData.current_temp}°C`],
+        ['Live Humidity', `${envData.current_humidity}%`],
+        ['Live Precipitation', `${envData.current_precip} mm`],
+        ['Live Wind Speed', `${envData.current_wind} km/h`],
+      ] : []),
+    ];
+
+    const envTableRows = envRows.map(([label, value]) =>
+      `<tr><td>${label}</td><td><strong>${value}</strong></td></tr>`
+    ).join('');
+
+    const farmerRows = [
+      ...(farmerName ? [['Farmer Name', farmerName], ['Phone', farmerPhone]] : []),
+      ['Land Size', `${landSize} ${landUnit}`],
+      ['Irrigation', irrigation.join(', ')],
+      ['Primary Goal', goal],
+      ['Market Access', market],
+      ['Investment', budget],
+      ['Equipment', equipment],
+    ];
+
+    const farmerTableRows = farmerRows.map(([label, value]) =>
+      `<tr><td>${label}</td><td><strong>${value}</strong></td></tr>`
+    ).join('');
+
+    const printDate = new Date().toLocaleDateString('en-IN', {
+      day: '2-digit', month: 'long', year: 'numeric'
+    });
+
+    const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgriGuide – ${reportTitle} – ${locationLabel}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Outfit', Arial, sans-serif;
+      font-size: 11pt;
+      color: #1a1a2e;
+      background: #fff;
+      padding: 28px 32px;
+      line-height: 1.55;
+    }
+    /* ── Header ── */
+    .report-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      border-bottom: 3px solid #d4af37;
+      padding-bottom: 14px;
+      margin-bottom: 22px;
+    }
+    .report-header .brand { display: flex; align-items: center; gap: 12px; }
+    .report-header .logo {
+      width: 44px; height: 44px;
+      background: #d4af37;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem;
+    }
+    .report-header h1 { font-size: 15pt; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+    .report-header .sub { font-size: 9pt; color: #7a7a9a; letter-spacing: 0.5px; margin-top: 3px; }
+    .report-header .meta { text-align: right; font-size: 9pt; color: #555; }
+    .report-header .meta strong { display: block; font-size: 11pt; color: #1a1a2e; }
+    /* ── Report type badge ── */
+    .badge {
+      display: inline-block;
+      background: #d4af37;
+      color: #fff;
+      font-size: 8pt;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 20px;
+      margin-bottom: 18px;
+    }
+    /* ── Section headers ── */
+    .section-label {
+      font-size: 8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #8b7355;
+      border-bottom: 1px solid #e8e0cc;
+      padding-bottom: 5px;
+      margin: 22px 0 12px;
+    }
+    /* ── Two-column data tables ── */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10pt;
+      margin-bottom: 6px;
+    }
+    .data-table td {
+      padding: 6px 10px;
+      border-bottom: 1px solid #f0ece0;
+      vertical-align: top;
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table td:first-child { color: #555; width: 44%; }
+    .data-table td:last-child { color: #1a1a2e; }
+    .data-table tr:nth-child(even) td { background: #fdfaf2; }
+    /* ── AI report content ── */
+    .report-body { margin-top: 8px; }
+    .report-body p { margin: 0 0 10px; color: #222; }
+    .report-body h1 { font-size: 14pt; color: #2c3e50; margin: 20px 0 8px; border-bottom: 2px solid #d4af37; padding-bottom: 4px; }
+    .report-body h2 { font-size: 12pt; color: #2c3e50; margin: 18px 0 8px; }
+    .report-body h3 {
+      font-size: 11pt;
+      color: #8b6914;
+      margin: 14px 0 8px;
+      padding: 8px 12px;
+      background: #fdf8ec;
+      border-left: 4px solid #d4af37;
+      border-radius: 0 6px 6px 0;
+      page-break-after: avoid;
+    }
+    .report-body ul { margin: 6px 0 12px 22px; }
+    .report-body li { margin-bottom: 5px; color: #333; }
+    .report-body strong { color: #1a1a2e; font-weight: 700; }
+    .report-body em { color: #555; }
+    .report-body hr { border: none; border-top: 1px solid #ddd; margin: 16px 0; }
+    /* ── Page breaks ── */
+    .report-body h2, .report-body h3 { break-after: avoid; }
+    ul, li, p { break-inside: avoid; }
+    /* ── Footer ── */
+    .report-footer {
+      margin-top: 30px;
+      padding-top: 12px;
+      border-top: 1px solid #ddd;
+      font-size: 8pt;
+      color: #999;
+      display: flex;
+      justify-content: space-between;
+    }
+    @media print {
+      body { padding: 0; }
+      @page { margin: 18mm 15mm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="report-header">
+    <div class="brand">
+      <div class="logo">🌾</div>
+      <div>
+        <div class="sub">Smart Crop Selection Platform</div>
+        <h1>AgriGuide</h1>
+      </div>
+    </div>
+    <div class="meta">
+      <strong>${locationLabel}</strong>
+      Generated: ${printDate}<br/>
+      Powered by Gemini AI
+    </div>
+  </div>
+
+  <div class="badge">${reportTitle}</div>
+
+  <div class="section-label">📍 Location &amp; Environmental Data</div>
+  <table class="data-table">
+    <tbody>${envTableRows}</tbody>
+  </table>
+
+  <div class="section-label">👨‍🌾 Farmer Profile</div>
+  <table class="data-table">
+    <tbody>${farmerTableRows}</tbody>
+  </table>
+
+  <div class="section-label">🤖 AI-Generated ${reportTitle}</div>
+  <div class="report-body"><p>${mdToHtml(recommendation)}</p></div>
+
+  <div class="report-footer">
+    <span>AgriGuide – AI-Powered Crop Planning Platform</span>
+    <span>Printed: ${printDate}</span>
+  </div>
+
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.print();
+        setTimeout(function() { window.close(); }, 1000);
+      }, 400);
+    };
+  <\/script>
+</body>
+</html>`;
+
+    const printWin = window.open('', '_blank', 'width=900,height=700,scrollbars=yes');
+    if (!printWin) {
+      alert('Please allow popups for this site to enable the Download / Print feature.');
+      return;
+    }
+    printWin.document.open();
+    printWin.document.write(htmlContent);
+    printWin.document.close();
+  };
+
   return (
     <main style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
       {/* Background Map */}
@@ -592,7 +867,7 @@ export default function Home() {
 
       {/* Header Overlay */}
       <div
-        className="glass-panel"
+        className="glass-panel header-overlay no-print"
         style={{
           position: 'absolute', top: '20px', left: '20px', zIndex: 10, padding: '20px',
           width: '380px', borderTop: '4px solid var(--accent-color)',
@@ -681,7 +956,7 @@ export default function Home() {
 
       {/* Error / Warning Toast */}
       {errorMsg && (
-        <div className="glass-panel animate-slide-in" style={{
+        <div className="glass-panel animate-slide-in no-print" style={{
           position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)',
           zIndex: 10, padding: '15px 25px', border: '1px solid #ef4444'
         }}>
@@ -691,7 +966,7 @@ export default function Home() {
 
       {/* Loading Indicator */}
       {loadingStation && (
-        <div className="glass-panel" style={{
+        <div className="glass-panel no-print" style={{
           position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
           zIndex: 10, padding: '20px', display: 'flex', alignItems: 'center', gap: '10px'
         }}>
@@ -705,7 +980,7 @@ export default function Home() {
 
       {/* Side Panel for Results — shown for envData OR non-agri land (banner only) */}
       {(envData || isNonAgri) && (
-        <div className="glass-panel animate-slide-in" style={{
+        <div className="glass-panel animate-slide-in results-panel" style={{
           position: 'absolute', top: '20px', right: '20px', bottom: '20px', width: '520px',
           zIndex: 10, display: 'flex', flexDirection: 'column', overflow: 'hidden',
           borderLeft: '4px solid var(--accent-secondary)',
@@ -713,7 +988,7 @@ export default function Home() {
           boxShadow: '0 20px 40px rgba(0, 0, 0, 0.15)',
           border: '1px solid rgba(212, 175, 55, 0.25)'
         }}>
-          <div style={{ 
+          <div className="results-panel-header" style={{ 
             padding: '20px 24px', 
             background: 'linear-gradient(135deg, #2c3e50 0%, #1a252f 100%)', 
             borderBottom: '2px solid var(--accent-color)',
@@ -727,7 +1002,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
+          <div className="results-content-scroll" style={{ padding: '20px', overflowY: 'auto', flex: 1 }}>
 
             {/* landWarning soft banner (only shown when envData exists alongside it) */}
             {landWarning && envData && (
@@ -967,9 +1242,31 @@ export default function Home() {
               </div>
             )}
 
+            {/* Print-only Farmer Profile Summary (visible only in print) */}
+            {!isNonAgri && (
+              <div className="data-section print-only" style={{ display: 'none' }}>
+                <h3 style={{ fontSize: '1.25rem', borderBottom: '2px solid #333', paddingBottom: '6px', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Farmer Profile & Context</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 20px', fontSize: '10pt', color: '#111' }}>
+                  {farmerName && (
+                    <>
+                      <div><strong>Farmer Name:</strong> {farmerName}</div>
+                      <div><strong>Phone Number:</strong> {farmerPhone}</div>
+                    </>
+                  )}
+                  <div><strong>Land Size:</strong> {landSize} {landUnit}</div>
+                  <div><strong>Irrigation Methods:</strong> {irrigation.join(', ')}</div>
+                  <div><strong>Primary Goal:</strong> {goal}</div>
+                  <div><strong>Market Access:</strong> {market}</div>
+                  <div><strong>Investment Capacity:</strong> {budget}</div>
+                  <div><strong>Equipment Access:</strong> {equipment}</div>
+                </div>
+                <hr style={{ border: 'none', borderTop: '1px solid #ccc', margin: '20px 0' }} />
+              </div>
+            )}
+
             {/* Farmer Context Form — hidden for non-agri land */}
             {!isNonAgri && (
-            <div className="data-section">
+            <div className="data-section no-print">
               <h3 className="section-title">Farmer Profile & Context</h3>
               <div style={{ background: 'var(--panel-bg)', padding: '15px', borderRadius: '8px', border: '1px solid var(--panel-border)' }}>
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
@@ -1124,7 +1421,7 @@ export default function Home() {
             )}
 
             {!isNonAgri && recommendation && (
-              <div style={{
+              <div className="recommendation-card" style={{
                 background: 'rgba(16, 185, 129, 0.08)',
                 border: '1px solid rgba(16, 185, 129, 0.3)',
                 padding: '20px',
@@ -1138,11 +1435,11 @@ export default function Home() {
                     </span>
                     <span style={{ fontSize: '0.9rem', color: 'var(--accent-color)', fontWeight: 600 }}>Gemini AI</span>
                   </div>
-                  <button onClick={() => setRecommendation(null)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
+                  <button className="no-print" onClick={() => setRecommendation(null)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
                 </div>
 
                 {/* Voice Readback Widget */}
-                <div style={{
+                <div className="voice-widget no-print" style={{
                   background: 'rgba(212, 175, 55, 0.1)',
                   border: '1px solid rgba(212, 175, 55, 0.25)',
                   borderRadius: '10px',
@@ -1257,14 +1554,16 @@ export default function Home() {
                   {renderRecommendation(recommendation)}
                 </div>
                 <button
-                  onClick={() => window.print()}
+                  onClick={handlePrint}
                   style={{
-                    marginTop: '25px', background: 'var(--accent-color)', border: 'none',
-                    color: 'white', padding: '12px 16px', borderRadius: '6px', cursor: 'pointer', width: '100%',
-                    textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600
+                    marginTop: '25px', background: 'linear-gradient(135deg, #d4af37, #b8860b)', border: 'none',
+                    color: 'white', padding: '13px 16px', borderRadius: '6px', cursor: 'pointer', width: '100%',
+                    textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700,
+                    boxShadow: '0 4px 15px rgba(212,175,55,0.4)', fontSize: '0.9rem',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
                   }}
                 >
-                  Download / Print
+                  🖨️ Download / Print Report
                 </button>
               </div>
             )}
@@ -1272,7 +1571,7 @@ export default function Home() {
         </div>
       )}
       {showCRM && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="glass-panel" style={{ width: '600px', maxWidth: '90%', maxHeight: '80vh', overflowY: 'auto', padding: '30px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>📡 SMS Notification Gateway</h2>
